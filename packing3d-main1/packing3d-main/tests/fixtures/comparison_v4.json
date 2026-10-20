@@ -1,0 +1,156 @@
+{
+  "format": "packing3d-comparison-report",
+  "version": 4,
+  "implementation_version": "example-u32",
+  "trials": [
+    {
+      "run_metadata": {
+        "format": "packing-ga-run-metadata",
+        "version": 2,
+        "run_id": "20000000-0000-4000-8000-000000000008",
+        "status": "completed",
+        "origin": "compare_cli",
+        "replay_of": null,
+        "problem": {
+          "container": [
+            4,
+            2,
+            1
+          ],
+          "source_boxes": [
+            [
+              2,
+              1,
+              1,
+              1
+            ],
+            [
+              7,
+              2,
+              1,
+              1
+            ]
+          ],
+          "source_box_order": [
+            2,
+            7
+          ],
+          "effective_box_order": [
+            2,
+            7
+          ],
+          "order_mode": "source",
+          "source": null,
+          "fixture_sha256": null
+        },
+        "decoder": {
+          "name": "PP",
+          "priority": "BottomFirst",
+          "reference_version": "PP-ref-v2",
+          "fitness_version": "density-v1",
+          "pp_initialization": "bl_first_generation",
+          "candidate_policy": "Cartesian",
+          "candidate_policy_version": 1,
+          "min_support_percent": 55,
+          "support_model_version": "support-union-v1"
+        },
+        "ga": {
+          "population_size": 4,
+          "generation_count": 2,
+          "crossover_rate": 1.0,
+          "mutation_rate": 0.1,
+          "seed": 0
+        },
+        "execution": {
+          "workers": {
+            "requested_mode": "manual",
+            "manual_workers": 4,
+            "resolved_workers": 4,
+            "resolver_version": "workers-static-v1",
+            "auto_ratio": 0.75,
+            "auto_cap": 8,
+            "limit_reasons": [],
+            "warning_reasons": []
+          },
+          "cache": false,
+          "start_method": "spawn"
+        },
+        "environment": {
+          "os": {
+            "system": "Windows",
+            "release": null,
+            "machine": null
+          },
+          "python": {
+            "implementation": "CPython",
+            "version": "3.13.5"
+          },
+          "implementation": {
+            "version": "example-u32",
+            "revision": "example-only"
+          },
+          "executor": {
+            "name": "concurrent.futures.ProcessPoolExecutor",
+            "worker_limit": 61,
+            "limit_source": "windows_process_pool_61"
+          },
+          "cpu": {
+            "label": null,
+            "label_source": null,
+            "detection": {
+              "attempts": [
+                {
+                  "method": "os.process_cpu_count",
+                  "status": "success",
+                  "value": 16,
+                  "detail": null
+                },
+                {
+                  "method": "os.sched_getaffinity",
+                  "status": "not_called",
+                  "value": null,
+                  "detail": null
+                },
+                {
+                  "method": "os.cpu_count",
+                  "status": "not_called",
+                  "value": null,
+                  "detail": null
+                },
+                {
+                  "method": "fallback",
+                  "status": "not_called",
+                  "value": null,
+                  "detail": null
+                }
+              ],
+              "selected_method": "os.process_cpu_count",
+              "available_logical_estimate": 16,
+              "fallback_reasons": []
+            }
+          }
+        },
+        "statistics": {
+          "requested": 8,
+          "computed": 8,
+          "cache_hits": 0,
+          "elapsed_seconds": 0.5,
+          "elapsed_scope": "ga_call_including_resolution_and_pool"
+        }
+      },
+      "best": {
+        "generation_index": 0,
+        "population_index": 0,
+        "genes": [
+          2,
+          7
+        ],
+        "fitness": 0.375,
+        "placed_count": 2,
+        "failed_count": 0,
+        "placed_volume": 3,
+        "density": 0.375
+      }
+    }
+  ]
+}

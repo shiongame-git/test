@@ -1,0 +1,8 @@
+# Keep the source distribution usable for development and its bundled tests.
+include .python-version .gitattributes .editorconfig uv.lock run_gui.bat
+recursive-include docs *.md
+recursive-include tests *.py *.json *.md
+recursive-include data *.txt
+recursive-include demo *.py *.pyw *.ps1
+recursive-include examples *.json
+recursive-include benchmarks *.py *.json *.md

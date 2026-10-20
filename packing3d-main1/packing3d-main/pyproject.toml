@@ -1,0 +1,26 @@
+[project]
+name = "packing3d"
+dynamic = ["version"]
+description = "Windows / Python 3.13 source-checkout software for 3D packing research"
+requires-python = ">=3.13,<3.14"
+dependencies = []
+
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.11"]
+
+[tool.uv]
+package = false
+environments = ["sys_platform == 'win32'"]
+
+[tool.pytest.ini_options]
+addopts = "-ra --strict-config --strict-markers"
+testpaths = ["tests"]
+pythonpath = ["src", "tests"]
+markers = ["slow: complete multi-run acceptance and full Research condition matrix"]
+
+[tool.ruff]
+target-version = "py313"
+extend-include = ["*.pyw"]
+
+[tool.ruff.lint]
+select = ["E9", "F"]
