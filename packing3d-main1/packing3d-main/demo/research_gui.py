@@ -96,6 +96,8 @@ class ResearchExperimentDialog:
             generation_count=int(app.ga_generations_var.get()),
             crossover_rate=float(app.ga_crossover_var.get()),
             mutation_rate=float(app.ga_mutation_var.get()),
+            use_center_of_gravity=bool(app.ga_cog_var.get()),
+            center_of_gravity_lambda=float(app.ga_cog_lambda_var.get()),
         )
         request = parse_workers_request(app.ga_workers_mode_var.get(), app.ga_workers_var.get())
         decoder = parse_decoder_settings(app.candidate_policy_var.get(), app.min_support_percent_var.get())

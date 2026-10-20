@@ -1,6 +1,12 @@
 """Reference 3D packing implementation with BL/PP decoders and GA search."""
 
 from .bl import BLPriority, find_bl_point, pack
+from .center_of_gravity import (
+    CenterOfGravity,
+    calculate_balance_distance,
+    calculate_center_distance,
+    calculate_center_of_gravity,
+)
 from ._decoder_config import DecoderConfig
 from .errors import InputFormatError
 from .evaluation import DecoderInput
@@ -49,6 +55,7 @@ __all__ = [
     "ComparisonDecoder",
     "ComparisonProblemSignature",
     "ComparisonTrialResult",
+    "CenterOfGravity",
     "ExperimentEnvironment",
     "Box",
     "Container",
@@ -72,6 +79,9 @@ __all__ = [
     "PPGARunResult",
     "PPGenerationResult",
     "PPState",
+    "calculate_center_distance",
+    "calculate_balance_distance",
+    "calculate_center_of_gravity",
     "current_environment",
     "evaluate_bl_individual",
     "evaluate_pp_individual",

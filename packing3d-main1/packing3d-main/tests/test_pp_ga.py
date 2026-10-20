@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import random
+import pytest
 
 from packing import (
     BLPriority,
@@ -16,6 +17,7 @@ from packing import (
     pp_state_from_result,
     run_bl_ga,
     run_pp_ga,
+    calculate_balance_distance,
     validate_result,
 )
 from packing.model import PackingResult, Placement
@@ -125,6 +127,30 @@ def test_pp_ga_uses_pp_after_initial_generation_and_records_complete_input_state
                 expected_container=c,
                 ordered_boxes=ordered,
             ) == ()
+
+
+def test_pp_ga_cog_toggle_penalizes_each_generation_and_records_setting():
+    container = Container(4, 2, 2)
+    boxes = (Box(1, 2, 2, 2),)
+    run = run_pp_ga(
+        container,
+        boxes,
+        config=GAConfig(
+            population_size=2,
+            generation_count=2,
+            use_center_of_gravity=True,
+            center_of_gravity_lambda=0.25,
+        ),
+    )
+
+    for generation in run.generations:
+        for evaluation in generation.evaluations:
+            distance = calculate_balance_distance(evaluation.packing_result)
+            assert distance is not None
+            assert evaluation.fitness == pytest.approx(
+                evaluation.packing_result.density - 0.25 * distance
+            )
+    assert run.run_metadata.to_dict()["decoder"]["fitness_version"] == "density-cog-v3"
 
 
 def test_pp_ga_mutation_does_not_rebind_positions_by_sequence_index():

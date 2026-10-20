@@ -13,6 +13,7 @@ from packing import (
     GAProgress,
     Individual,
     Point,
+    calculate_balance_distance,
     evaluate_bl_individual,
     run_bl_ga,
     validate_result,
@@ -22,6 +23,7 @@ from packing.ga import (
     _initial_population,
     _mutate_swap,
 )
+from packing.run_context import prepare_manual_replay
 
 
 def _genes_by_generation(run):
@@ -58,6 +60,48 @@ def test_density_evaluator_keeps_individual_order_and_uses_density_only():
         expected_container=c,
         ordered_boxes=(boxes[1], boxes[0]),
     ) == ()
+
+
+def test_ga_cog_toggle_applies_density_minus_lambda_times_floor_center_distance():
+    container = Container(4, 2, 2)
+    boxes = (Box(1, 2, 2, 2),)
+    individual = Individual((1,))
+
+    density_only = evaluate_bl_individual(container, boxes, individual)
+    cog = evaluate_bl_individual(
+        container,
+        boxes,
+        individual,
+        use_center_of_gravity=True,
+        center_of_gravity_lambda=0.25,
+    )
+    distance = calculate_balance_distance(cog.packing_result)
+
+    assert distance == pytest.approx((2**0.5) / 3)
+    assert density_only.fitness == density_only.packing_result.density == 0.5
+    assert cog.fitness == pytest.approx(cog.packing_result.density - 0.25 * distance)
+
+
+def test_ga_cog_settings_are_used_in_run_and_saved_for_replay():
+    run = run_bl_ga(
+        Container(4, 2, 2),
+        (Box(1, 2, 2, 2),),
+        config=GAConfig(
+            population_size=2,
+            generation_count=1,
+            use_center_of_gravity=True,
+            center_of_gravity_lambda=0.25,
+        ),
+    )
+
+    assert run.best.fitness < run.best.packing_result.density
+    metadata = run.run_metadata.to_dict()
+    assert metadata["decoder"]["fitness_version"] == "density-cog-v3"
+    assert metadata["ga"]["use_center_of_gravity"] is True
+    assert metadata["ga"]["center_of_gravity_lambda"] == 0.25
+    replay = prepare_manual_replay(run.run_metadata)
+    assert replay.config.use_center_of_gravity is True
+    assert replay.config.center_of_gravity_lambda == 0.25
 
 
 def test_initial_population_is_seeded_shuffle_and_allows_duplicates():

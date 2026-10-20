@@ -167,7 +167,7 @@ def snapshot_from_ga(run: GARunResult | PPGARunResult) -> dict[str, Any]:
     d = meta["decoder"]
     execution = meta["execution"]
     workers = execution["workers"]
-    return {
+    snapshot = {
         "problem": meta["problem"],
         "decoder": {
             "name": d["name"], "priority": d["priority"], "reference_version": d["reference_version"],
@@ -183,6 +183,10 @@ def snapshot_from_ga(run: GARunResult | PPGARunResult) -> dict[str, Any]:
         "profile": run.profile is not None,
         "pp_input_state": None,
     }
+    if meta["ga"].get("use_center_of_gravity", False):
+        snapshot["ga"].update(use_center_of_gravity=True,
+                               center_of_gravity_lambda=meta["ga"]["center_of_gravity_lambda"])
+    return snapshot
 
 
 def snapshot_for_single(
@@ -945,7 +949,7 @@ def _verify_record_bundle(directory: Path, record: ResearchRecord) -> ResearchRe
             for row in rows:
                 trace_result = _validate_embedded_result(row["packing_result"])
                 _validate_result(trace_result, data["snapshot"], row["genes"])
-                if row["placed_count"] != trace_result.placed_count or row["failed_count"] != trace_result.failed_count or row["placed_volume"] != trace_result.placed_volume or row["density"] != trace_result.density or row["fitness"] != trace_result.density:
+                if row["placed_count"] != trace_result.placed_count or row["failed_count"] != trace_result.failed_count or row["placed_volume"] != trace_result.placed_volume or row["density"] != trace_result.density or (data["snapshot"]["decoder"]["fitness_version"] == "density-v1" and row["fitness"] != trace_result.density):
                     raise InputFormatError("Full trace evaluation summary differs from result")
                 expected_decoder = "BL" if data["record_type"] == "BL-GA" or row["generation_index"] == 0 else "PP"
                 if row["decoder"] != expected_decoder:
@@ -966,7 +970,7 @@ def _verify_record_bundle(directory: Path, record: ResearchRecord) -> ResearchRe
 
 def snapshot_from_metadata(metadata: dict[str, Any], profile: bool) -> dict[str, Any]:
     d, execution, workers = metadata["decoder"], metadata["execution"], metadata["execution"]["workers"]
-    return {
+    snapshot = {
         "problem": metadata["problem"],
         "decoder": {key: d[key] for key in (
             "name", "priority", "reference_version", "fitness_version", "pp_initialization",
@@ -977,6 +981,10 @@ def snapshot_from_metadata(metadata: dict[str, Any], profile: bool) -> dict[str,
         "profile": profile,
         "pp_input_state": None,
     }
+    if metadata["ga"].get("use_center_of_gravity", False):
+        snapshot["ga"].update(use_center_of_gravity=True,
+                               center_of_gravity_lambda=metadata["ga"]["center_of_gravity_lambda"])
+    return snapshot
 
 
 def read_research_record(directory: str | os.PathLike[str], *, verify_artifacts: bool = True) -> ResearchRecord:

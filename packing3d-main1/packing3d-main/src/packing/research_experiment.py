@@ -202,7 +202,7 @@ def prepare_research_experiment(
             "name": "BL" if record_type == "BL-GA" else "PP",
             "priority": priority.value,
             "reference_version": "BL-ref-v2" if record_type == "BL-GA" else "PP-ref-v2",
-            "fitness_version": "density-v1",
+            "fitness_version": ("density-cog-v3" if config.unity_style_random_weights else "density-cog-v2") if config.use_center_of_gravity else "density-v1",
             "pp_initialization": None if record_type == "BL-GA" else "bl_first_generation",
             "candidate_policy": decoder.candidate_policy,
             "candidate_policy_version": decoder.candidate_policy_version,
@@ -224,6 +224,9 @@ def prepare_research_experiment(
         "profile": profile,
         "pp_input_state": None,
     }
+    if config.use_center_of_gravity:
+        snapshot["ga"].update(use_center_of_gravity=True,
+                              center_of_gravity_lambda=config.center_of_gravity_lambda)
     fixed_options = RunOptions(
         request=WorkersRequest("manual", resolved_count),
         origin=options.origin,

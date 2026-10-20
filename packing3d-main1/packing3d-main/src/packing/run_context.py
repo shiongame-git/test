@@ -75,6 +75,11 @@ def begin_run(
         raise TypeError('source_boxes must contain the same Box definitions as execution input')
     if {b.id: b for b in source} != {b.id: b for b in boxes}:
         raise ValueError('source_boxes definitions differ from execution input')
+    ga_metadata = dict(population_size=config.population_size, generation_count=config.generation_count,
+                       crossover_rate=config.crossover_rate, mutation_rate=config.mutation_rate, seed=seed)
+    if config.use_center_of_gravity:
+        ga_metadata.update(use_center_of_gravity=True,
+                           center_of_gravity_lambda=config.center_of_gravity_lambda)
     data = dict(format='packing-ga-run-metadata', version=2, run_id=str(uuid4()), status='completed',
                 origin=options.origin, replay_of=options.replay_of,
                 problem=dict(container=[container.W, container.H, container.D],
@@ -82,13 +87,12 @@ def begin_run(
                              source_box_order=[b.id for b in source], effective_box_order=[b.id for b in boxes],
                              order_mode=options.order_mode, source=options.source, fixture_sha256=options.fixture_sha256),
                 decoder=dict(name=decoder, priority=priority.value, reference_version=decoder + '-ref-v2',
-                             fitness_version='density-v1', pp_initialization=None if decoder == 'BL' else 'bl_first_generation',
+                           fitness_version=('density-cog-v3' if config.unity_style_random_weights else 'density-cog-v2') if config.use_center_of_gravity else 'density-v1', pp_initialization=None if decoder == 'BL' else 'bl_first_generation',
                              candidate_policy=decoder_config.candidate_policy,
                              candidate_policy_version=decoder_config.candidate_policy_version,
                              min_support_percent=decoder_config.min_support_percent,
                              support_model_version=decoder_config.support_model_version),
-                ga=dict(population_size=config.population_size, generation_count=config.generation_count,
-                        crossover_rate=config.crossover_rate, mutation_rate=config.mutation_rate, seed=seed),
+                ga=ga_metadata,
                 execution=dict(workers=workers, cache=resolved.cache, start_method=None if resolved.workers == 1 else 'spawn'),
                 environment=environment,
                 statistics=dict(requested=config.population_size * config.generation_count,
@@ -150,7 +154,9 @@ def prepare_manual_replay(metadata, *, origin='api', cpu_reader=detect_cpu):
             differences.append(f'{key}: {previous[key]} → {current[key]}')
     differences.append('implementation revision: ' + (m['environment']['implementation']['revision'] or 'unknown') + '; current revision: ' + (source_revision() or 'unknown') + '; exact reproduction is not verified')
     return ReplaySettings(Container(*p['container']), boxes, m['decoder']['name'], BLPriority(m['decoder']['priority']),
-                          GAConfig(g['population_size'], g['generation_count'], float(g['crossover_rate']), float(g['mutation_rate'])),
+                          GAConfig(g['population_size'], g['generation_count'], float(g['crossover_rate']), float(g['mutation_rate']),
+                                   g.get('use_center_of_gravity', False), float(g.get('center_of_gravity_lambda', 0.1)),
+                                   m['decoder']['fitness_version'] == 'density-cog-v3'),
                           g['seed'], GAExecutionConfig(w, m['execution']['cache']),
                           decoder_config,
                           RunOptions(request=WorkersRequest('manual', w), origin=origin, replay_of=m['run_id'],

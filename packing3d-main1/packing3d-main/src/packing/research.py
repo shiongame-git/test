@@ -229,7 +229,7 @@ def _validate_snapshot(snapshot: Any, record_type: str) -> None:
         raise ValueError("$.snapshot.decoder.min_support_percent: expected 0 through 100")
     _enum(decoder["support_model_version"], ("support-union-v1",), "$.snapshot.decoder.support_model_version")
     is_ga = record_type.endswith("-GA")
-    _enum(decoder["fitness_version"], ("density-v1",), "$.snapshot.decoder.fitness_version") if is_ga else None
+    _enum(decoder["fitness_version"], ("density-v1", "density-cog-v1", "density-cog-v2", "density-cog-v3"), "$.snapshot.decoder.fitness_version") if is_ga else None
     if not is_ga and decoder["fitness_version"] is not None:
         raise ValueError("$.snapshot.decoder.fitness_version: must be null for single runs")
     pp_initialization = "bl_first_generation" if record_type == "PP-GA" else (
@@ -239,11 +239,25 @@ def _validate_snapshot(snapshot: Any, record_type: str) -> None:
         raise ValueError("$.snapshot.decoder.pp_initialization: inconsistent with record_type")
 
     if is_ga:
-        ga = _object(s["ga"], ("population_size", "generation_count", "crossover_rate", "mutation_rate"), "$.snapshot.ga")
+        ga_keys = ("population_size", "generation_count", "crossover_rate", "mutation_rate")
+        if type(s["ga"]) is dict and "use_center_of_gravity" in s["ga"]:
+            ga_keys += ("use_center_of_gravity", "center_of_gravity_lambda")
+        ga = _object(s["ga"], ga_keys, "$.snapshot.ga")
         _integer(ga["population_size"], "$.snapshot.ga.population_size", 1)
         _integer(ga["generation_count"], "$.snapshot.ga.generation_count", 1)
         _number(ga["crossover_rate"], "$.snapshot.ga.crossover_rate", maximum=1)
         _number(ga["mutation_rate"], "$.snapshot.ga.mutation_rate", maximum=1)
+        if "use_center_of_gravity" in ga:
+            if type(ga["use_center_of_gravity"]) is not bool or not ga["use_center_of_gravity"]:
+                raise TypeError("$.snapshot.ga.use_center_of_gravity: expected true when CoG settings are present")
+            _number(ga["center_of_gravity_lambda"], "$.snapshot.ga.center_of_gravity_lambda", minimum=0)
+        valid_fitness = (
+            decoder["fitness_version"] in ("density-cog-v1", "density-cog-v2", "density-cog-v3")
+            if ga.get("use_center_of_gravity", False)
+            else decoder["fitness_version"] == "density-v1"
+        )
+        if not valid_fitness:
+            raise ValueError("$.snapshot decoder fitness version does not match GA settings")
         _validate_execution(s["execution"], "$.snapshot.execution")
     else:
         if s["ga"] is not None or s["execution"] is not None:
@@ -312,9 +326,9 @@ def _validate_summary(value: Any, record_type: str, save_level: str, snapshot: d
     ids = snapshot["problem"]["source_box_order"]
     if len(genes) != len(ids) or set(genes) != set(ids):
         raise ValueError("$.summary.best.genes must be a permutation of problem IDs")
-    for key in ("fitness", "density"):
-        _number(best[key], "$.summary.best." + key, maximum=1)
-    if best["fitness"] != best["density"]:
+    _number(best["fitness"], "$.summary.best.fitness", minimum=float("-inf"))
+    _number(best["density"], "$.summary.best.density", maximum=1)
+    if snapshot["decoder"]["fitness_version"] == "density-v1" and best["fitness"] != best["density"]:
         raise ValueError("$.summary.best fitness and density differ")
     if best["placed_count"] + best["failed_count"] != len(ids):
         raise ValueError("$.summary.best counts do not match problem")
@@ -332,7 +346,7 @@ def _validate_summary(value: Any, record_type: str, save_level: str, snapshot: d
     if len(generations) != ga["generation_count"]:
         raise ValueError("$.summary.generations count differs from generation_count")
     cumulative: dict[str, Any] | None = None
-    previous_mean_best = -1.0
+    previous_mean_best = float("-inf")
     for index, raw in enumerate(generations):
         row = _object(raw, GENERATION_SUMMARY_KEYS, f"$.summary.generations[{index}]")
         if _integer(row["generation_index"], f"$.summary.generations[{index}].generation_index") != index:
@@ -343,7 +357,7 @@ def _validate_summary(value: Any, record_type: str, save_level: str, snapshot: d
         if _integer(row["count"], f"$.summary.generations[{index}].count", 1) != ga["population_size"]:
             raise ValueError("$.summary.generations count differs from population_size")
         for key in ("min", "max", "mean", "best_fitness"):
-            _number(row[key], f"$.summary.generations[{index}].{key}", maximum=1)
+            _number(row[key], f"$.summary.generations[{index}].{key}", minimum=float("-inf"))
         best_population = _integer(row["best_population_index"], f"$.summary.generations[{index}].best_population_index")
         if best_population >= ga["population_size"] or row["min"] > row["max"] or not row["min"] <= row["mean"] <= row["max"]:
             raise ValueError("$.summary.generations statistics are inconsistent")
@@ -352,7 +366,7 @@ def _validate_summary(value: Any, record_type: str, save_level: str, snapshot: d
         current = _object(row["cumulative_best"], CUMULATIVE_BEST_KEYS, f"$.summary.generations[{index}].cumulative_best")
         _integer(current["generation_index"], f"$.summary.generations[{index}].cumulative_best.generation_index")
         _integer(current["population_index"], f"$.summary.generations[{index}].cumulative_best.population_index")
-        _number(current["fitness"], f"$.summary.generations[{index}].cumulative_best.fitness", maximum=1)
+        _number(current["fitness"], f"$.summary.generations[{index}].cumulative_best.fitness", minimum=float("-inf"))
         if current["generation_index"] > index or current["population_index"] >= ga["population_size"]:
             raise ValueError("$.summary.generations cumulative best index out of range")
         if index == 0 and current != {"generation_index": 0, "population_index": best_population,
@@ -896,15 +910,13 @@ def read_generations_jsonl(path: str | os.PathLike[str]) -> tuple[dict[str, Any]
             packing_result = _validate_trace_packing_result(
                 item["packing_result"], genes, boxes, path_name + ".packing_result",
             )
-            _number(item["fitness"], path_name + ".fitness", maximum=1)
+            _number(item["fitness"], path_name + ".fitness", minimum=float("-inf"))
             _enum(item["decoder"], ("BL", "PP"), path_name + ".decoder")
             if item["pp_input_state"] is not None:
                 _validate_state(item["pp_input_state"], sorted(ids), path_name + ".pp_input_state")
             for key in ("placed_count", "failed_count", "placed_volume"):
                 _integer(item[key], path_name + "." + key)
             _number(item["density"], path_name + ".density", maximum=1)
-            if item["fitness"] != item["density"]:
-                raise ValueError(path_name + " fitness and density differ")
             if (item["placed_count"], item["failed_count"], item["placed_volume"]) != (
                 packing_result.placed_count, boxes - packing_result.placed_count, packing_result.placed_volume
             ):

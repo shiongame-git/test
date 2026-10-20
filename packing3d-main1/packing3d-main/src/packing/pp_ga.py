@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import random
+import math
 from dataclasses import dataclass, field
 from collections.abc import Callable, Iterable
 
@@ -12,7 +13,8 @@ from ._decoder_config import (
     resolve_decoder_config,
 )
 from .bl import BLPriority
-from .evaluation import DecoderInput
+from .evaluation import DecoderInput, apply_cog_penalty
+from .center_of_gravity import with_unity_random_weights
 from .execution import EvaluationRuntime, EvaluationStats, GAExecutionConfig
 from .io_run_metadata import RunMetadata
 from .profile import DecoderProfileCollector, DecoderProfileRecord
@@ -163,9 +165,11 @@ def evaluate_pp_individual(
     *,
     priority: BLPriority = BLPriority.BOTTOM_FIRST,
     decoder_config: DecoderConfig | None = None,
+    use_center_of_gravity: bool = False,
+    center_of_gravity_lambda: float = 0.1,
     _profile: DecoderProfileCollector | None = None,
 ) -> EvaluationResult:
-    """Evaluate one ID permutation with the PP decoder and density-only fitness."""
+    """Evaluate one ID permutation with PP and optional CoG fitness penalty."""
     if type(container) is not Container:
         raise TypeError("container must be a Container")
     decoder_config = resolve_decoder_config(decoder_config)
@@ -176,6 +180,12 @@ def evaluate_pp_individual(
         raise TypeError("state must be a PPState")
     if type(priority) is not BLPriority:
         raise TypeError("priority must be a BLPriority")
+    if type(use_center_of_gravity) is not bool:
+        raise TypeError("use_center_of_gravity must be a Python bool")
+    if type(center_of_gravity_lambda) is not float:
+        raise TypeError("center_of_gravity_lambda must be a Python float")
+    if not math.isfinite(center_of_gravity_lambda) or center_of_gravity_lambda < 0.0:
+        raise ValueError("center_of_gravity_lambda must be finite and >= 0.0")
     _validate_individual_for_problem(individual, frozen_boxes)
 
     by_id = {box.id: box for box in frozen_boxes}
@@ -198,7 +208,10 @@ def evaluate_pp_individual(
             decoder_config=decoder_input.decoder_config,
             _profile=_profile,
         )
-    return EvaluationResult(individual, result, result.density)
+    fitness = apply_cog_penalty(
+        result, result.density, use_center_of_gravity, center_of_gravity_lambda
+    )
+    return EvaluationResult(individual, result, float(fitness))
 
 
 def _crossover_pair_with_states(
@@ -310,6 +323,8 @@ def run_pp_ga(
         run_options,
     )
     execution = context.execution
+    if config.use_center_of_gravity and config.unity_style_random_weights:
+        frozen_boxes = with_unity_random_weights(frozen_boxes, seed)
 
     base_ids = tuple(box.id for box in frozen_boxes)
     rng = random.Random(seed)
@@ -357,6 +372,8 @@ def run_pp_ga(
                     priority=priority,
                     generation_index=generation_index,
                     decoder_config=decoder_config,
+                    use_center_of_gravity=config.use_center_of_gravity,
+                    center_of_gravity_lambda=config.center_of_gravity_lambda,
                     progress_callback=on_evaluated,
                 )
             else:
@@ -372,6 +389,8 @@ def run_pp_ga(
                     priority=priority,
                     generation_index=generation_index,
                     decoder_config=decoder_config,
+                    use_center_of_gravity=config.use_center_of_gravity,
+                    center_of_gravity_lambda=config.center_of_gravity_lambda,
                     progress_callback=on_evaluated,
                 )
 

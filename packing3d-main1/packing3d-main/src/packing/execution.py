@@ -73,6 +73,8 @@ def _bl_worker(
     individual: Any,
     priority: BLPriority,
     decoder_config: DecoderConfig,
+    use_center_of_gravity: bool = False,
+    center_of_gravity_lambda: float = 0.1,
     profile_enabled: bool = False,
 ) -> Any:
     # Local import keeps this module independent of ga.py at import time and
@@ -86,6 +88,8 @@ def _bl_worker(
             individual,
             priority=priority,
             decoder_config=decoder_config,
+            use_center_of_gravity=use_center_of_gravity,
+            center_of_gravity_lambda=center_of_gravity_lambda,
         )
     profile = DecoderProfileCollector()
     result = evaluate_bl_individual(
@@ -94,6 +98,8 @@ def _bl_worker(
         individual,
         priority=priority,
         decoder_config=decoder_config,
+        use_center_of_gravity=use_center_of_gravity,
+        center_of_gravity_lambda=center_of_gravity_lambda,
         _profile=profile,
     )
     return _ProfiledEvaluation(result, profile.snapshot())
@@ -106,6 +112,8 @@ def _pp_worker(
     state: PPState,
     priority: BLPriority,
     decoder_config: DecoderConfig,
+    use_center_of_gravity: bool = False,
+    center_of_gravity_lambda: float = 0.1,
     profile_enabled: bool = False,
 ) -> Any:
     from .pp_ga import evaluate_pp_individual
@@ -118,6 +126,8 @@ def _pp_worker(
             state,
             priority=priority,
             decoder_config=decoder_config,
+            use_center_of_gravity=use_center_of_gravity,
+            center_of_gravity_lambda=center_of_gravity_lambda,
         )
     profile = DecoderProfileCollector()
     result = evaluate_pp_individual(
@@ -127,6 +137,8 @@ def _pp_worker(
         state,
         priority=priority,
         decoder_config=decoder_config,
+        use_center_of_gravity=use_center_of_gravity,
+        center_of_gravity_lambda=center_of_gravity_lambda,
         _profile=profile,
     )
     return _ProfiledEvaluation(result, profile.snapshot())
@@ -147,7 +159,7 @@ def _problem_signature(
     return (
         "packing3d-evaluation-v2",
         (container.W, container.H, container.D),
-        tuple((box.id, box.w, box.h, box.d) for box in boxes),
+        tuple((box.id, box.w, box.h, box.d, box.weight) for box in boxes),
         priority.value,
         decoder_config.candidate_policy,
         decoder_config.candidate_policy_version,
@@ -227,13 +239,17 @@ class EvaluationRuntime:
         priority: BLPriority,
         generation_index: int,
         decoder_config: DecoderConfig | None = None,
+        use_center_of_gravity: bool = False,
+        center_of_gravity_lambda: float = 0.1,
         progress_callback: Callable[[int], None] | None = None,
     ) -> tuple[Any, ...]:
         decoder_config = resolve_decoder_config(decoder_config)
-        namespace = _problem_signature(container, boxes, priority, decoder_config) + ("BL-ref-v2",)
+        namespace = _problem_signature(container, boxes, priority, decoder_config) + (
+            "BL-ref-v2", use_center_of_gravity, center_of_gravity_lambda
+        )
         keys = tuple(namespace + (individual.genes,) for individual in population)
         calls = tuple(
-            (container, boxes, individual, priority, decoder_config)
+            (container, boxes, individual, priority, decoder_config, use_center_of_gravity, center_of_gravity_lambda)
             + ((True,) if self.profile_enabled else ())
             for individual in population
         )
@@ -255,17 +271,21 @@ class EvaluationRuntime:
         priority: BLPriority,
         generation_index: int,
         decoder_config: DecoderConfig | None = None,
+        use_center_of_gravity: bool = False,
+        center_of_gravity_lambda: float = 0.1,
         progress_callback: Callable[[int], None] | None = None,
     ) -> tuple[Any, ...]:
         decoder_config = resolve_decoder_config(decoder_config)
-        namespace = _problem_signature(container, boxes, priority, decoder_config) + ("PP-ref-v2",)
+        namespace = _problem_signature(container, boxes, priority, decoder_config) + (
+            "PP-ref-v2", use_center_of_gravity, center_of_gravity_lambda
+        )
         individuals = tuple(individual for individual, _ in population)
         keys = tuple(
             namespace + (individual.genes, _state_signature(state))
             for individual, state in population
         )
         calls = tuple(
-            (container, boxes, individual, state, priority, decoder_config)
+            (container, boxes, individual, state, priority, decoder_config, use_center_of_gravity, center_of_gravity_lambda)
             + ((True,) if self.profile_enabled else ())
             for individual, state in population
         )

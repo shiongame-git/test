@@ -29,7 +29,7 @@ uv run --locked python run.py
 空白・タブ・改行を挟めます。回転や並べ替えは行わず、置けない箱の後も処理します。
 配置候補の生成方式はCartesian / LocalNeighbors、最小支持率は0〜100%。通常はCartesian / 55%です。
 PPは箱ID別の継承位置を試し、残りをBLで一度再配置します。
-GAは箱順を探索し、評価値には密度を使います。同じ入力とseedなら、ワーカー数やキャッシュの有無で全世代の順列・PP状態・配置・評価値・最良個体は変わりません。
+GAは箱順を探索します。既定では密度を評価値に使い、設定で重心ペナルティを有効にできます。同じ入力とseedなら、ワーカー数やキャッシュの有無で全世代の順列・PP状態・配置・評価値・最良個体は変わりません。
 
 ## 研究記録
 
@@ -65,7 +65,12 @@ def main() -> None:
     run = run_bl_ga(
         container,
         boxes,
-        config=GAConfig(population_size=4, generation_count=2),
+        config=GAConfig(
+            population_size=4,
+            generation_count=2,
+            use_center_of_gravity=True,
+            center_of_gravity_lambda=0.1,
+        ),
         seed=0,
         execution=GAExecutionConfig(workers=2, cache=True),
     )
@@ -77,6 +82,12 @@ def main() -> None:
 if __name__ == "__main__":
     main()
 ```
+
+`use_center_of_gravity=False`で従来の密度評価に戻せます。有効時の適応度は
+`density - center_of_gravity_lambda * normalized_distance`です。Python版の密度と正規化距離は0〜1の範囲です。
+距離の目標点はコンテナ床面の水平中央 `(W/2, 0, D/2)` で、箱は体積加重
+(均一密度を仮定)するのが基本です。GA実行時に重心評価を有効にすると、Unity版に合わせ、箱IDごとに1〜10の乱数重量をseedから一度だけ割り当てます。個体間では同じ箱IDの重量を固定します。明示的な`Box.weight`がある箱はその重量を優先します。
+正規化距離は目標点から最遠のコンテナ角までの距離で割ります。この評価式は`density-cog-v3`として記録し、従来の未正規化式`density-cog-v1`および体積重みの正規化式`density-cog-v2`と区別します。
 
 対話Pythonでは`$env:PYTHONPATH = (Resolve-Path src).Path`を設定してから
 `uv run --locked python`を使えます。別プロジェクトからも参照先リポジトリの`src`を指定します。
@@ -94,3 +105,23 @@ if __name__ == "__main__":
 | `write_unity_result_data` | Unity表示用出力 |
 
 開発・検証は[開発手順](docs/development.md)、モジュール構成は[設計](docs/architecture.md)を参照してください。
+
+## Center-of-gravity calculation
+
+The `packing.center_of_gravity` module provides a mass-weighted center-of-gravity
+estimate for successfully placed boxes, using each box's geometric center.
+Explicit `Box.weight` values are used when present; otherwise volume is used as
+a uniform-density fallback. CoG-enabled GA runs use Unity-style per-ID random
+weights from 1 through 10, generated once from the run seed.
+
+```python
+from packing import calculate_center_distance, calculate_center_of_gravity
+
+center = calculate_center_of_gravity(result)  # None when no boxes were placed
+center_distance = calculate_center_distance(result)  # distance from container center
+```
+
+`calculate_center_distance` returns a distance in the same units as the container
+coordinates. This is a geometric balance indicator, not a full physical stability
+simulation: it does not account for differing material densities, contact forces,
+or support polygons.

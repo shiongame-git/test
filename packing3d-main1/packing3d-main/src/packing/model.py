@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 
 
 def _require_builtin_int(name: str, value: object, *, minimum: int) -> None:
@@ -34,12 +35,18 @@ class Box:
     w: int
     h: int
     d: int
+    weight: float | None = None
 
     def __post_init__(self) -> None:
         _require_builtin_int("id", self.id, minimum=0)
         _require_builtin_int("w", self.w, minimum=1)
         _require_builtin_int("h", self.h, minimum=1)
         _require_builtin_int("d", self.d, minimum=1)
+        if self.weight is not None:
+            if type(self.weight) is not float:
+                raise TypeError("weight must be a Python float or None")
+            if not math.isfinite(self.weight) or self.weight <= 0.0:
+                raise ValueError("weight must be finite and > 0.0")
 
     @property
     def volume(self) -> int:

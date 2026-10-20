@@ -3,10 +3,33 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 from typing import Generic, TypeVar
 
 from ._decoder_config import DecoderConfig, DEFAULT_DECODER_CONFIG
-from .model import Box, Container
+from .model import Box, Container, PackingResult
+
+
+def apply_cog_penalty(
+    result: PackingResult, density: float, use_center_of_gravity: bool, weight: float
+) -> float:
+    """Apply the shared, dimensionless CoG penalty to a density score."""
+    if type(result) is not PackingResult:
+        raise TypeError("result must be a PackingResult")
+    if type(density) is not float:
+        raise TypeError("density must be a Python float")
+    if type(use_center_of_gravity) is not bool:
+        raise TypeError("use_center_of_gravity must be a Python bool")
+    if type(weight) is not float:
+        raise TypeError("weight must be a Python float")
+    if not math.isfinite(weight) or weight < 0.0:
+        raise ValueError("weight must be finite and >= 0.0")
+    if not use_center_of_gravity:
+        return density
+    from .center_of_gravity import calculate_balance_distance
+
+    distance = calculate_balance_distance(result)
+    return density if distance is None else density - weight * distance
 
 
 DecoderStateT = TypeVar("DecoderStateT")

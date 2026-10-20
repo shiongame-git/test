@@ -20,7 +20,8 @@ ROOT = ('format', 'version', 'run_id', 'status', 'origin', 'replay_of', 'problem
 PROBLEM = ('container', 'source_boxes', 'source_box_order', 'effective_box_order', 'order_mode', 'source', 'fixture_sha256')
 DECODER_V2 = ('name', 'priority', 'reference_version', 'fitness_version', 'pp_initialization',
               'candidate_policy', 'candidate_policy_version', 'min_support_percent', 'support_model_version')
-GA = ('population_size', 'generation_count', 'crossover_rate', 'mutation_rate', 'seed')
+GA_BASE = ('population_size', 'generation_count', 'crossover_rate', 'mutation_rate', 'seed')
+GA_COG = ('population_size', 'generation_count', 'crossover_rate', 'mutation_rate', 'use_center_of_gravity', 'center_of_gravity_lambda', 'seed')
 WORKERS = ('requested_mode', 'manual_workers', 'resolved_workers', 'resolver_version', 'auto_ratio', 'auto_cap', 'limit_reasons', 'warning_reasons')
 STATS = ('requested', 'computed', 'cache_hits', 'elapsed_seconds', 'elapsed_scope')
 BEST = ('generation_index', 'population_index', 'genes', 'fitness', 'placed_count', 'failed_count', 'placed_volume', 'density')
@@ -125,12 +126,19 @@ def validate_problem(p):
 
 
 def validate_ga(g):
-    obj(g, GA, '$.ga')
+    if type(g) is not dict or set(g) not in (set(GA_BASE), set(GA_COG)):
+        raise ValueError('$.ga: missing or unknown keys')
     integer(g['population_size'], '$.ga.population_size', 1)
     integer(g['generation_count'], '$.ga.generation_count', 1)
     integer(g['seed'], '$.ga.seed')
     for key in ('crossover_rate', 'mutation_rate'):
         number(g[key], '$.ga.' + key, maximum=1)
+    if 'use_center_of_gravity' in g:
+        if type(g['use_center_of_gravity']) is not bool:
+            raise TypeError('$.ga.use_center_of_gravity: expected boolean')
+        if not g['use_center_of_gravity']:
+            raise ValueError('$.ga.use_center_of_gravity: extended settings require CoG to be enabled')
+        number(g['center_of_gravity_lambda'], '$.ga.center_of_gravity_lambda', minimum=0)
 
 
 def validate_detection(d):
@@ -231,7 +239,7 @@ def validate_run_metadata(metadata):
     enum(d['name'], ('BL', 'PP'), '$.decoder.name')
     enum(d['priority'], ('BottomFirst', 'BackFirst'), '$.decoder.priority')
     enum(d['reference_version'], (d["name"] + '-ref-v2',), '$.decoder.reference_version')
-    enum(d['fitness_version'], ('density-v1',), '$.decoder.fitness_version')
+    enum(d['fitness_version'], ('density-v1', 'density-cog-v1', 'density-cog-v2', 'density-cog-v3'), '$.decoder.fitness_version')
     equal(d['pp_initialization'], None if d['name'] == 'BL' else 'bl_first_generation', '$.decoder.pp_initialization')
     enum(d['candidate_policy'], ('Cartesian', 'LocalNeighbors'), '$.decoder.candidate_policy')
     equal(integer(d['candidate_policy_version'], '$.decoder.candidate_policy_version'), 1,
@@ -241,6 +249,10 @@ def validate_run_metadata(metadata):
         raise ValueError('$.decoder.min_support_percent: expected integer from 0 through 100')
     enum(d['support_model_version'], ('support-union-v1',), '$.decoder.support_model_version')
     validate_ga(m['ga'])
+    if not m['ga'].get('use_center_of_gravity', False):
+        equal(m['decoder']['fitness_version'], 'density-v1', '$.decoder.fitness_version')
+    elif m['decoder']['fitness_version'] not in ('density-cog-v1', 'density-cog-v2', 'density-cog-v3'):
+        raise ValueError('$.decoder.fitness_version: expected a CoG fitness version')
     validate_environment(m['environment'])
     ex = obj(m['execution'], ('workers', 'cache', 'start_method'), '$.execution')
     if type(ex['cache']) is not bool:
@@ -278,7 +290,7 @@ def validate_run_metadata(metadata):
 
 def _ordered(m):
     out = {k: m[k] for k in ROOT}
-    for key, keys in [('problem', PROBLEM), ('ga', GA), ('statistics', STATS)]:
+    for key, keys in [('problem', PROBLEM), ('ga', tuple(m['ga'])), ('statistics', STATS)]:
         out[key] = {k: m[key][k] for k in keys}
     out['decoder'] = {k: m['decoder'][k] for k in DECODER_V2}
     out['execution'] = {k: m['execution'][k] for k in ('workers', 'cache', 'start_method')}
@@ -373,7 +385,7 @@ def write_run_metadata_json(path, metadata):
     atomic_write(path, _ordered(data))
 
 
-def validate_best(best, problem, ga):
+def validate_best(best, problem, ga, fitness_version):
     obj(best, BEST, '$.trials[].best')
     for key in ('generation_index', 'population_index', 'placed_count', 'failed_count', 'placed_volume'):
         integer(best[key], '$.trials[].best.' + key)
@@ -385,9 +397,10 @@ def validate_best(best, problem, ga):
     ids = problem['source_box_order']
     if len(genes) != len(ids) or set(genes) != set(ids):
         raise ValueError('$.trials[].best.genes: not a full permutation')
-    for key in ('fitness', 'density'):
-        number(best[key], '$.trials[].best.' + key, maximum=1)
-    equal(best['fitness'], best['density'], '$.trials[].best.fitness')
+    number(best['fitness'], '$.trials[].best.fitness', minimum=-math.inf)
+    number(best['density'], '$.trials[].best.density', maximum=1)
+    if fitness_version == 'density-v1':
+        equal(best['fitness'], best['density'], '$.trials[].best.fitness')
     equal(best['placed_count'] + best['failed_count'], len(ids), '$.trials[].best.counts')
     volume = math.prod(problem['container'])
     if best['placed_volume'] > min(volume, sum(math.prod(b[1:]) for b in problem['source_boxes'])):
@@ -414,7 +427,7 @@ def validate_comparison_report(report):
         if m['run_id'] in ids:
             raise ValueError('$.trials: duplicate run_id')
         ids.add(m['run_id'])
-        validate_best(t['best'], m['problem'], m['ga'])
+        validate_best(t['best'], m['problem'], m['ga'], m['decoder']['fitness_version'])
 
 
 def read_comparison_report_json(path):

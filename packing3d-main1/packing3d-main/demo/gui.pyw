@@ -111,6 +111,8 @@ class PackingDemoApp:
         self.ga_generations_var = tk.StringVar(value=str(default_ga.generation_count))
         self.ga_crossover_var = tk.StringVar(value=str(default_ga.crossover_rate))
         self.ga_mutation_var = tk.StringVar(value=str(default_ga.mutation_rate))
+        self.ga_cog_var = tk.BooleanVar(value=default_ga.use_center_of_gravity)
+        self.ga_cog_lambda_var = tk.StringVar(value=str(default_ga.center_of_gravity_lambda))
         self.ga_seed_var = tk.StringVar(value="0")
         self.ga_workers_mode_var = tk.StringVar(value="Auto")
         self.workers_info_var = tk.StringVar(value="ワーカー数: 未確認")
@@ -129,6 +131,7 @@ class PackingDemoApp:
         self.ga_button.state(["disabled"])
         for variable in (self.ga_workers_mode_var, self.ga_workers_var, self.ga_population_var,
                          self.ga_generations_var, self.ga_crossover_var, self.ga_mutation_var,
+                         self.ga_cog_var, self.ga_cog_lambda_var,
                          self.ga_seed_var, self.ga_decoder_var, self.priority_var, self.ga_cache_var,
                          self.candidate_policy_var, self.min_support_percent_var):
             variable.trace_add("write", self._on_settings_changed)
@@ -257,6 +260,18 @@ class PackingDemoApp:
             execution_frame, text="評価結果をキャッシュする", variable=self.ga_cache_var
         )
         self.ga_cache_check.pack(side="left", padx=(0, 14))
+        self.ga_cog_check = ttk.Checkbutton(
+            execution_frame, text="重心を評価に使う", variable=self.ga_cog_var
+        )
+        self.ga_cog_check.pack(side="left", padx=(0, 8))
+        ttk.Label(execution_frame, text="λ:").pack(side="left", padx=(0, 4))
+        self.ga_cog_lambda_entry = ttk.Entry(
+            execution_frame, textvariable=self.ga_cog_lambda_var, width=7
+        )
+        self.ga_cog_lambda_entry.pack(side="left", padx=(0, 14))
+        ttk.Label(execution_frame, text="重量: Unity方式 (ID別1〜10 / seed固定)").pack(
+            side="left", padx=(0, 12)
+        )
         self.ga_paper_defaults_button = ttk.Button(
             execution_frame, text="GA標準設定", command=self.apply_paper_ga_defaults
         )
@@ -422,6 +437,8 @@ class PackingDemoApp:
         self.ga_generations_var.set(str(config.generation_count))
         self.ga_crossover_var.set(str(config.crossover_rate))
         self.ga_mutation_var.set(str(config.mutation_rate))
+        self.ga_cog_var.set(config.use_center_of_gravity)
+        self.ga_cog_lambda_var.set(str(config.center_of_gravity_lambda))
         self.ga_seed_var.set("0")
         self.status_var.set("GA設定を標準値に戻しました（seed=0）。")
 
@@ -430,6 +447,8 @@ class PackingDemoApp:
         self.ga_generations_var.set("2")
         self.ga_crossover_var.set("0.8")
         self.ga_mutation_var.set("0.1")
+        self.ga_cog_var.set(False)
+        self.ga_cog_lambda_var.set(str(GAConfig().center_of_gravity_lambda))
         self.ga_seed_var.set("0")
         self.status_var.set("GA設定を簡易テスト用の軽量値へ変更しました。")
 
@@ -449,6 +468,7 @@ class PackingDemoApp:
             self.replay_settings = None
             self.status_var.set("設定を変更したため、保存した条件での再実行ではなくなりました。")
         self.ga_workers_entry.configure(state="normal" if self.ga_workers_mode_var.get() == "Manual" else "disabled")
+        self.ga_cog_lambda_entry.configure(state="normal" if self.ga_cog_var.get() else "disabled")
         try:
             decoder_config = parse_decoder_settings(
                 self.candidate_policy_var.get(), self.min_support_percent_var.get()
@@ -598,6 +618,8 @@ class PackingDemoApp:
             self.ga_generations_var.set(str(settings.config.generation_count))
             self.ga_crossover_var.set(str(settings.config.crossover_rate))
             self.ga_mutation_var.set(str(settings.config.mutation_rate))
+            self.ga_cog_var.set(settings.config.use_center_of_gravity)
+            self.ga_cog_lambda_var.set(str(settings.config.center_of_gravity_lambda))
             self.ga_seed_var.set(str(settings.seed))
             self.ga_workers_mode_var.set("Manual")
             self.ga_workers_var.set(str(settings.execution.workers))
@@ -835,6 +857,8 @@ class PackingDemoApp:
                 generation_count=int(self.ga_generations_var.get()),
                 crossover_rate=float(self.ga_crossover_var.get()),
                 mutation_rate=float(self.ga_mutation_var.get()),
+                use_center_of_gravity=bool(self.ga_cog_var.get()),
+                center_of_gravity_lambda=float(self.ga_cog_lambda_var.get()),
             )
             seed = int(self.ga_seed_var.get())
             if seed < 0:
