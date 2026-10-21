@@ -13,7 +13,7 @@ def _mark_gui_spawn_worker() -> None:
         (directory / f"{os.getpid()}.marker").write_text("spawned", encoding="utf-8")
 
 
-def delayed_failure_bl_worker(container, boxes, individual, priority, decoder_config):
+def delayed_failure_bl_worker(container, boxes, individual, priority, decoder_config, *_):
     """Fail index-shaped individuals in deliberately reversed completion order."""
     if individual.genes and individual.genes[0] == 1:
         time.sleep(0.25)

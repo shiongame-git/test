@@ -370,7 +370,7 @@ def test_all_unplaced_result_is_unchanged_by_parallel_and_cache():
 def test_public_run_bl_ga_propagates_timeout_as_indexed_evaluation_error(monkeypatch):
     import packing.execution as execution_module
 
-    def timeout_worker(container, boxes, individual, priority, decoder_config):
+    def timeout_worker(container, boxes, individual, priority, decoder_config, *_):
         raise TimeoutError("public BL timeout")
 
     monkeypatch.setattr(execution_module, "_bl_worker", timeout_worker)
@@ -392,7 +392,7 @@ def test_public_run_bl_ga_propagates_timeout_as_indexed_evaluation_error(monkeyp
 def test_public_run_pp_ga_propagates_pp_timeout_after_initial_bl_generation(monkeypatch):
     import packing.execution as execution_module
 
-    def timeout_worker(container, boxes, individual, state, priority, decoder_config):
+    def timeout_worker(container, boxes, individual, state, priority, decoder_config, *_):
         raise TimeoutError("public PP timeout")
 
     monkeypatch.setattr(execution_module, "_pp_worker", timeout_worker)
@@ -416,7 +416,7 @@ def test_failed_evaluation_is_not_cached_for_later_attempt(monkeypatch):
 
     calls = 0
 
-    def timeout_worker(container, boxes, individual, priority, decoder_config):
+    def timeout_worker(container, boxes, individual, priority, decoder_config, *_):
         nonlocal calls
         calls += 1
         raise TimeoutError("do not cache me")
